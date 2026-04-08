@@ -180,12 +180,16 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 		if page < maxPages {
 			safeRestTime := 50
 			totalAccounts := len(authPool)
-			delay := safeRestTime / totalAccounts
+
+			// Ceiling division: pastiin total cycle >= 50 detik
+			delay := (safeRestTime + totalAccounts - 1) / totalAccounts
 
 			if delay < 2 {
 				delay = 2
 			}
-			slog.Debug("Jeda pintar antar request", "detik", delay, "waktu_istirahat_akun_nanti", delay*totalAccounts)
+
+			totalCycleTime := delay * totalAccounts
+			slog.Info("Jeda antar request (ceiling)", "detik_per_akun", delay, "total_cycle_time", totalCycleTime)
 			time.Sleep(time.Duration(delay) * time.Second)
 		}
 	}

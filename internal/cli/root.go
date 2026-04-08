@@ -140,6 +140,8 @@ func runScraper(tab string) error {
 				if exp, err := exporter.NewJSON(fileName); err == nil {
 					activeExporters = append(activeExporters, exp)
 					fmt.Println("[+] Exporter Aktif: JSON ->", fileName)
+				} else {
+					fmt.Printf("[!] Gagal init JSON exporter '%s': %v (di-skip)\n", fileName, err) // ← OPSIONAL
 				}
 			case "sqlite":
 				if exp, err := exporter.NewSQLite(fileName); err == nil {
