@@ -170,6 +170,12 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 
 		slog.Info("Halaman selesai", "page", page, "tweets", pageTweetCount)
 
+		// DEBUG: Lacak cursor biar nggak duplikat
+		slog.Info("Cursor debug",
+			"page", page,
+			"nextCursor", nextCursor,
+			"found", newCursorFound)
+
 		if !newCursorFound || nextCursor == "" {
 			slog.Warn("Cursor abis, scraping stop")
 			break
