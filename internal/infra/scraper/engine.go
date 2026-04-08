@@ -1,195 +1,195 @@
 package scraper
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
+	"regexp" // Wajib buat bersihin HTML tag
 	"strings"
 	"time"
 
+	"kx-scraper/internal/exporter"
 	"kx-scraper/internal/infra/parser/curl"
 	"kx-scraper/internal/models"
 )
 
-// FetchData mengeksekusi scraping berdasarkan data dari cURL
-func FetchData(p *curl.ParsedReq, maxPages int, exportFile string) error {
-	slog.Info("Memulai engine scraper", "max_pages", maxPages, "target_export", exportFile)
+// Perhatikan: parameter keempat sekarang nangkep isRaw
+func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, isRaw bool) error {
+	slog.Info("Memulai engine scraper multi-auth", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
 
-	// SETUP CSV WRITER
-	var csvWriter *csv.Writer
-	if exportFile != "" {
-		file, err := os.Create(exportFile)
-		if err != nil {
-			slog.Error("Gagal membuat file CSV", "error", err)
-			return fmt.Errorf("gagal bikin file csv: %v", err)
-		}
-		defer file.Close()
-
-		csvWriter = csv.NewWriter(file)
-		defer csvWriter.Flush()
-
-		csvWriter.Write([]string{"Username", "Teks", "Retweets", "Likes", "Views", "URL Tweet"})
-		slog.Info("File CSV siap digunakan", "file", exportFile)
-	}
-
-	// SETUP HTTP CONNECTION POOLING
-	// Ini bikin request lu gak perlu buka-tutup jalur TLS dari nol tiap ganti halaman
-	customTransport := &http.Transport{
-		MaxIdleConns:        10,
-		MaxIdleConnsPerHost: 10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableKeepAlives:   false, // Wajib false biar koneksi di-reuse
-	}
 	client := &http.Client{
-		Transport: customTransport,
-		Timeout:   15 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     30 * time.Second,
+		},
+		Timeout: 15 * time.Second,
 	}
 
 	totalTweets := 0
+	var nextCursor string
+	currentAuthIdx := 0
 
-	// LOOPING PAGINATION
+	// Senjata buat hapus HTML tag (misal <a> href... </a>)
+	htmlRegex := regexp.MustCompile(`<[^>]*>`)
+
 	for page := 1; page <= maxPages; page++ {
-		slog.Info("Mengeksekusi halaman", "page", page)
+		p := authPool[currentAuthIdx]
+		slog.Info("Eksekusi halaman", "page", page, "akun_index", currentAuthIdx)
 
-		varsBytes, err := json.Marshal(p.Variables)
-		if err != nil {
-			slog.Error("Gagal re-marshal variables", "error", err)
-			return err
+		if nextCursor != "" {
+			p.Variables["cursor"] = nextCursor
 		}
 
-		varsEncoded := url.QueryEscape(string(varsBytes))
-		varsEncoded = strings.ReplaceAll(varsEncoded, "+", "%20")
-
-		featEncoded := ""
-		if p.Features != "" {
-			featEncoded = url.QueryEscape(p.Features)
-			featEncoded = strings.ReplaceAll(featEncoded, "+", "%20")
-		}
+		varsBytes, _ := json.Marshal(p.Variables)
+		varsEncoded := strings.ReplaceAll(url.QueryEscape(string(varsBytes)), "+", "%20")
 
 		req, err := http.NewRequest("GET", p.BaseURL, nil)
 		if err != nil {
-			slog.Error("Gagal membuat HTTP request", "error", err)
+			slog.Error("Gagal bikin request", "error", err)
 			return err
 		}
-
-		rawQ := "variables=" + varsEncoded
-		if featEncoded != "" {
-			rawQ += "&features=" + featEncoded
+		req.URL.RawQuery = "variables=" + varsEncoded
+		if p.Features != "" {
+			req.URL.RawQuery += "&features=" + strings.ReplaceAll(url.QueryEscape(p.Features), "+", "%20")
 		}
-		req.URL.RawQuery = rawQ
 
-		slog.Debug("Generated URL", "page", page, "url", req.URL.String())
-
-		for key, val := range p.Headers {
-			if strings.ToLower(key) == "accept-encoding" {
-				continue
+		for k, v := range p.Headers {
+			if strings.ToLower(k) != "accept-encoding" {
+				req.Header.Set(k, v)
 			}
-			req.Header.Set(key, val)
 		}
 
-		// TEMBAK HTTP PAKE POOLED CLIENT
 		resp, err := client.Do(req)
 		if err != nil {
-			slog.Error("Request gagal", "page", page, "error", err)
-			return err
+			slog.Warn("Koneksi gagal, coba rotasi akun...", "error", err)
+			currentAuthIdx = (currentAuthIdx + 1) % len(authPool)
+			page--
+			continue
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		if err != nil {
-			slog.Error("Gagal membaca response body", "page", page, "error", err)
-			return err
-		}
-
 		if resp.StatusCode != 200 {
-			slog.Error("HTTP Error dari server X", "status_code", resp.StatusCode, "page", page)
-			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+			slog.Warn("Akun kena limit atau error, rotasi sekarang", "status", resp.StatusCode, "akun_index", currentAuthIdx)
+			currentAuthIdx = (currentAuthIdx + 1) % len(authPool)
+			time.Sleep(2 * time.Second)
+			page--
+			continue
 		}
 
 		var xData models.TimelineResponse
-		err = json.Unmarshal(body, &xData)
-		if err != nil {
-			slog.Error("Gagal parsing JSON response", "page", page, "error", err)
+		if err := json.Unmarshal(body, &xData); err != nil {
+			slog.Error("JSON berantakan", "error", err)
 			return err
 		}
 
-		var nextCursor string
 		pageTweetCount := 0
-
+		newCursorFound := false
 		instructions := xData.Data.SearchByRawQuery.SearchTimeline.Timeline.Instructions
+
 		for _, inst := range instructions {
-			
-			// Skenario 1: Cek di dalam array Entries
-			if len(inst.Entries) > 0 {
-				for _, entry := range inst.Entries {
-					tweet := entry.Content.ItemContent.TweetResults.Result
-					if tweet.RestID != "" {
-						username := tweet.Core.UserResults.Result.Core.ScreenName
-						text := tweet.Legacy.FullText
+			for _, entry := range inst.Entries {
+				tweet := entry.Content.ItemContent.TweetResults.Result
+				if tweet.RestID != "" {
+					userCore := tweet.Core.UserResults.Result
+					userLegacy := userCore.Legacy
+					postLegacy := tweet.Legacy
 
-						cleanFullText := strings.ReplaceAll(text, "\n", " ")
+					// LOGIC RAW vs SANITIZED
+					finalText := postLegacy.FullText
+					finalDesc := userLegacy.Description
+					finalSource := tweet.Source
 
-						if csvWriter != nil {
-							rt := fmt.Sprintf("%d", tweet.Legacy.RetweetCount)
-							fav := fmt.Sprintf("%d", tweet.Legacy.FavoriteCount)
-							views := fmt.Sprintf("%v", tweet.Views.ViewCount)
-							urlTweet := fmt.Sprintf("https://x.com/%s/status/%s", username, tweet.RestID)
-							
-							csvWriter.Write([]string{username, cleanFullText, rt, fav, views, urlTweet})
-						}
-
-						terminalText := cleanFullText
-						if len(terminalText) > 60 {
-							terminalText = terminalText[:60] + "..."
-						}
-						// Cetak progress ke terminal tanpa format slog biar gampang dibaca user
-						fmt.Printf("   -> [@%s]: %s\n", username, terminalText)
-
-						pageTweetCount++
-						totalTweets++
+					if !isRaw {
+						finalText = strings.ReplaceAll(finalText, "\n", " ")
+						finalDesc = strings.ReplaceAll(finalDesc, "\n", " ")
+						finalSource = htmlRegex.ReplaceAllString(finalSource, "")
 					}
 
-					if entry.Content.CursorType == "Bottom" {
-						nextCursor = entry.Content.Value
-						slog.Debug("Bottom cursor ditemukan (Array)", "cursor", nextCursor[:30]+"...")
+					isReply := postLegacy.InReplyToScreenName != ""
+
+					if exp != nil {
+						tweetData := models.TweetRecord{
+							PostID:              tweet.RestID,
+							UserID:              userCore.RestID,
+							AccCreatedAt:        userCore.Core.CreatedAt,
+							Name:                userCore.Core.Name,
+							ScreenName:          userCore.Core.ScreenName,
+							IsVerified:          userCore.IsBlueVerified,
+							Description:         finalDesc,
+							Location:            userCore.Location.Location,
+							FollowersCount:      userLegacy.FollowersCount,
+							FriendsCount:        userLegacy.FriendsCount,
+							StatusesCount:       userLegacy.StatusesCount,
+							FavoritesCount:      userLegacy.FavouritesCount,
+							ListedCount:         userLegacy.ListedCount,
+							MediaCount:          userLegacy.MediaCount,
+							DefaultProfile:      userLegacy.DefaultProfile,
+							DefaultProfileImage: userLegacy.DefaultProfileImage,
+							AvatarURL:           userCore.Avatar.ImageURL,
+							BannerURL:           userLegacy.ProfileBannerURL,
+							FullPost:            finalText,
+							PostingDate:         postLegacy.CreatedAt,
+							Language:            postLegacy.Lang,
+							RetweetCount:        postLegacy.RetweetCount,
+							ReplyCount:          postLegacy.ReplyCount,
+							FavoritePostCount:   postLegacy.FavoriteCount,
+							QuoteCount:          postLegacy.QuoteCount,
+							BookmarkCount:       postLegacy.BookmarkCount,
+							ViewsCount:          tweet.Views.Count,
+							IsReply:             isReply,
+							ReplyToAccount:      postLegacy.InReplyToScreenName,
+							ReplyToTweetID:      postLegacy.InReplyToStatusID,
+							ConversationID:      postLegacy.ConversationID,
+							SourceDevice:        finalSource,
+							URL:                 fmt.Sprintf("https://x.com/%s/status/%s", userCore.Core.ScreenName, tweet.RestID),
+						}
+						exp.Write(tweetData)
 					}
+
+					pageTweetCount++
+					totalTweets++
+				}
+
+				if entry.Content.CursorType == "Bottom" {
+					nextCursor = entry.Content.Value
+					newCursorFound = true
 				}
 			}
 
-			// Skenario 2: Cek di luar array
-			if inst.Entry != nil {
-				if inst.Entry.Content.CursorType == "Bottom" {
-					nextCursor = inst.Entry.Content.Value
-					slog.Debug("Bottom cursor ditemukan (Luar)", "cursor", nextCursor[:30]+"...")
-				}
+			if inst.Entry != nil && inst.Entry.Content.CursorType == "Bottom" {
+				nextCursor = inst.Entry.Content.Value
+				newCursorFound = true
 			}
 		}
-		
-		slog.Info("Selesai memproses halaman", "page", page, "tweet_ditemukan", pageTweetCount)
 
-		if nextCursor == "" {
-			slog.Warn("Scraping berhenti: Tidak ada cursor lanjutan dari server")
+		slog.Info("Halaman selesai", "page", page, "tweets", pageTweetCount)
+
+		if !newCursorFound || nextCursor == "" {
+			slog.Warn("Cursor abis, scraping stop")
 			break
 		}
 
-		p.Variables["cursor"] = nextCursor
+		currentAuthIdx = (currentAuthIdx + 1) % len(authPool)
 
 		if page < maxPages {
-			slog.Info("Menjalankan jeda anti-bot", "duration_sec", 50)
-			time.Sleep(50 * time.Second)
+			safeRestTime := 50
+			totalAccounts := len(authPool)
+			delay := safeRestTime / totalAccounts
+
+			if delay < 2 {
+				delay = 2
+			}
+			slog.Debug("Jeda pintar antar request", "detik", delay, "waktu_istirahat_akun_nanti", delay*totalAccounts)
+			time.Sleep(time.Duration(delay) * time.Second)
 		}
 	}
 
-	slog.Info("Scraping total selesai", "total_tweet", totalTweets)
-	
-	if exportFile != "" {
-		slog.Info("Data berhasil diexport", "file", exportFile)
-	}
+	slog.Info("Scraping kelar bre", "total_tweets", totalTweets)
 	return nil
 }
