@@ -1,0 +1,47 @@
+# ==========================
+# Binaries & Build Artifacts
+# ==========================
+/kx
+*.exe
+*.test
+vendor/
+go.work
+go.work.sum
+
+# ==========================
+# Root-level Data & Output
+# ==========================
+/data.json
+/datas.json
+/extract.json
+/pra-raw.*
+/prabowo-*.*
+/curl.txt
+/params.txt
+
+# ==========================
+# Sensitive & Auth
+# ==========================
+/auth/
+*.env
+.env*
+.env.*
+
+# ==========================
+# OS, IDE & Editor
+# ==========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+*.swp
+*~
+
+# ==========================
+# Sensitive & Auth
+# ==========================
+/auth/@*/*.txt
+/auth/**/curl.txt
+*.env
+.env*
+.env.*
