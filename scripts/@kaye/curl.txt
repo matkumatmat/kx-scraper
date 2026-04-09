@@ -1,0 +1,22 @@
+curl 'https://x.com/i/api/graphql/pCd62NDD9dlCDgEGgEVHMg/SearchTimeline?variables=%7B%22rawQuery%22%3A%22venusa%22%2C%22count%22%3A20%2C%22querySource%22%3A%22typed_query%22%2C%22product%22%3A%22Top%22%2C%22withGrokTranslatedBio%22%3Atrue%7D&features=%7B%22rweb_video_screen_enabled%22%3Afalse%2C%22profile_label_improvements_pcf_label_in_post_enabled%22%3Atrue%2C%22responsive_web_profile_redirect_enabled%22%3Afalse%2C%22rweb_tipjar_consumption_enabled%22%3Afalse%2C%22verified_phone_label_enabled%22%3Afalse%2C%22creator_subscriptions_tweet_preview_api_enabled%22%3Atrue%2C%22responsive_web_graphql_timeline_navigation_enabled%22%3Atrue%2C%22responsive_web_graphql_skip_user_profile_image_extensions_enabled%22%3Afalse%2C%22premium_content_api_read_enabled%22%3Afalse%2C%22communities_web_enable_tweet_community_results_fetch%22%3Atrue%2C%22c9s_tweet_anatomy_moderator_badge_enabled%22%3Atrue%2C%22responsive_web_grok_analyze_button_fetch_trends_enabled%22%3Afalse%2C%22responsive_web_grok_analyze_post_followups_enabled%22%3Atrue%2C%22responsive_web_jetfuel_frame%22%3Atrue%2C%22responsive_web_grok_share_attachment_enabled%22%3Atrue%2C%22responsive_web_grok_annotations_enabled%22%3Atrue%2C%22articles_preview_enabled%22%3Atrue%2C%22responsive_web_edit_tweet_api_enabled%22%3Atrue%2C%22graphql_is_translatable_rweb_tweet_is_translatable_enabled%22%3Atrue%2C%22view_counts_everywhere_api_enabled%22%3Atrue%2C%22longform_notetweets_consumption_enabled%22%3Atrue%2C%22responsive_web_twitter_article_tweet_consumption_enabled%22%3Atrue%2C%22content_disclosure_indicator_enabled%22%3Atrue%2C%22content_disclosure_ai_generated_indicator_enabled%22%3Atrue%2C%22responsive_web_grok_show_grok_translated_post%22%3Atrue%2C%22responsive_web_grok_analysis_button_from_backend%22%3Atrue%2C%22post_ctas_fetch_enabled%22%3Afalse%2C%22freedom_of_speech_not_reach_fetch_enabled%22%3Atrue%2C%22standardized_nudges_misinfo%22%3Atrue%2C%22tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled%22%3Atrue%2C%22longform_notetweets_rich_text_read_enabled%22%3Atrue%2C%22longform_notetweets_inline_media_enabled%22%3Afalse%2C%22responsive_web_grok_image_annotation_enabled%22%3Atrue%2C%22responsive_web_grok_imagine_annotation_enabled%22%3Atrue%2C%22responsive_web_grok_community_note_auto_translation_is_enabled%22%3Atrue%2C%22responsive_web_enhance_cards_enabled%22%3Afalse%7D' \
+  --compressed \
+  -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0' \
+  -H 'Accept: */*' \
+  -H 'Accept-Language: en-US,en;q=0.5' \
+  -H 'Accept-Encoding: gzip, deflate, br, zstd' \
+  -H 'Referer: https://x.com/search?q=venusa&src=typed_query' \
+  -H 'content-type: application/json' \
+  -H 'x-twitter-auth-type: OAuth2Session' \
+  -H 'x-csrf-token: 03872e930f9941721583ec4071a4c0f7464823371c5c39436071275a96e240a7afa6a203baae4d5238a7f724c99e2ec8dbf57f360b5965bcd9f15301862ab4cff2a88a749d522b584e4da2ab0b5b7d8d' \
+  -H 'x-twitter-client-language: id' \
+  -H 'x-twitter-active-user: yes' \
+  -H 'x-client-transaction-id: 8gAnbphiDH9nFxuHzgVkVNUNfmhwK8VQ9qVGeYeWBeA7mu7Z0VtCA9eU4FqIVF7/9bTddfeCcxe/nhorxUNQAiG/gRgg8Q' \
+  -H 'Sec-Fetch-Dest: empty' \
+  -H 'Sec-Fetch-Mode: cors' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  -H 'authorization: Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA' \
+  -H 'Connection: keep-alive' \
+  -H 'Cookie: guest_id_marketing=v1%3A177566990303393093; guest_id_ads=v1%3A177566990303393093; personalization_id="v1_ahhMhwDNTdV3ItSg+eLYIg=="; g_state={"i_l":0,"i_ll":1775669909281,"i_e":{"enable_itp_optimization":0}}; __cuid=c92f404ee0574ddd872cdd18c242fb0a; lang=id; __cf_bm=8CUUZGS2H7t22wZf3tecGV0wBst1KjqQZ7BIl_hNORg-1775669391.8835392-1.0.1.1-6Uq8tIrjUhQCHe_fVTVEYeqkRlUbDOAj0gCscTRWNiGdqDwQ8qCw89uEkZVQnX3NsB6cyffafqoy7muR2IRBm.vKdoQ9oO6MZ5VEWwucxqc.U_NKQgIK0vk.Evf2xMue; guest_id=v1%3A177566990303393093; gt=2041933698610680062; kdt=J4cco1I7UtYGamNcdnapboJB5Wq5rxwSbACaZgQp; twid=u%3D1829959327463194625; ct0=03872e930f9941721583ec4071a4c0f7464823371c5c39436071275a96e240a7afa6a203baae4d5238a7f724c99e2ec8dbf57f360b5965bcd9f15301862ab4cff2a88a749d522b584e4da2ab0b5b7d8d; auth_token=a934ebcdb4eaff132135ec1bf9584c4a1bc2e929' \
+  -H 'Pragma: no-cache' \
+  -H 'Cache-Control: no-cache' \
+  -H 'TE: trailers'

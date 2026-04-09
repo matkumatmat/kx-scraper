@@ -44,6 +44,13 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 			p.Variables["cursor"] = nextCursor
 		}
 
+		// if nextCursor != "" {
+		// 	for _, auth := range authPool {
+		// 		auth.Variables["cursor"] = nextCursor
+		// 	}
+		// }
+		fmt.Printf("Variables akun %d: %+v\n", currentAuthIdx, p.Variables)
+
 		varsBytes, _ := json.Marshal(p.Variables)
 		varsEncoded := strings.ReplaceAll(url.QueryEscape(string(varsBytes)), "+", "%20")
 
@@ -62,6 +69,13 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 				req.Header.Set(k, v)
 			}
 		}
+
+		// DEBUGGING START
+		fmt.Println("--- REQUEST CHECK ---")
+		fmt.Println("Features Length:", len(p.Features))
+		fmt.Println("Final URL:", req.URL.String()) // Cek apakah ada &features=... dan &variables=...{"cursor":"..."}
+		fmt.Println("---------------------")
+		// DEBUGGING END
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -87,6 +101,7 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 			slog.Error("JSON berantakan", "error", err)
 			return err
 		}
+		fmt.Println("RAW BODY 500 CHAR:", string(body)[:500])
 
 		pageTweetCount := 0
 		newCursorFound := false

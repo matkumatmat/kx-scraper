@@ -172,3 +172,6 @@ mycli user --from xxx --lang en --since 2025-01-01
 3. **Build Query**: Di dalam `runSearch()`, kamu tinggal rakit string `params` jadi format raw query awal kamu (`sarah "saraho" ...`) atau langsung pass ke HTTP/API client.
 
 Mau aku buatin helper function buat **auto-rakit string query** persis kayak format mentah kamu? (`sarah "saraho" (osarah) ...`) Biar tinggal `fmt.Sprintf()` di `runSearch()`? 🛠️
+
+
+DAACCgACHFZ6qrnAJxAKAAMcVnqqub_Y8AgABAAAAAILAAUAAADcRW1QQzZ3QUFBZlEvZ0dKTjB2R3AvQUFBQUJJY1VDbHBMVmRBRFJ4SWEvajFHakdRSEZRNmJXUldJTjBjVUY0MWFkWmhVQnhUdkE0TzF3QkJIQVovc3ZIWEFPc2JCQ240NkJxUjJSeFFqT1UvVjBCNkhGVTF4MU5YQUk0Y1BScXhVaHFnVGh3a1NrY0pHNUZGSEZNaU5Yc1hRRnNhY2p3dWVKYWhOeHhJMmk5TlYySG9Hc05LbmtTV0FTTWNWUlI4dDViaCtob0dUcmlNbXZFMUc3ZThEZTZXSUZNPQgABgAAAAAIAAcAAAAADAAICgABGgZOuIya8TUAAAA
