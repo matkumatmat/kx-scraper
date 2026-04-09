@@ -2,6 +2,7 @@
 # Binaries & Build Artifacts
 # ==========================
 /kx
+/roundtrip
 *.exe
 *.json
 *.html

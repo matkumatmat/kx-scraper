@@ -905,4 +905,69 @@ def identify(data):
 
 ---
 
+## 16. Studi Kasus Tab "Latest": Dekonstruksi Cursor Kronologis
+
+Selain Tab "Top" (yang berorientasi pada engagement dan deduplikasi menggunakan array `records`), sistem GraphQL X (Twitter) menggunakan format cursor yang **berbeda secara fundamental** untuk Tab "Latest". Tab ini murni berorientasi pada waktu (kronologis).
+
+### 16.1 Sampel Cursor "Latest"
+Berikut adalah sampel cursor dari Tab "Latest" (Bottom Cursor) pada 4 halaman yang berurutan:
+
+```text
+Cursor 1: DAADDAABCgABHFeNR3NWEdYKAAIcV4qUdtcxggAIAAIAAAACCAADAAAAAAgABAAAAAAKAAUcV41mUIAnEAoABhxXjWZQf9jwAAA
+Cursor 2: DAADDAABCgABHFeNR3NWEdYKAAIcV4hjC5eB5AAIAAIAAAACCAADAAAAAAgABAAAAAEKAAUcV41mUIAnEAoABhxXjWZQf7HgAAA
+Cursor 3: DAADDAABCgABHFeNR3NWEdYKAAIcV4YTo1fBCwAIAAIAAAACCAADAAAAAAgABAAAAAIKAAUcV41mUIAnEAoABhxXjWZQf4rQAAA
+Cursor 4: DAADDAABCgABHFeNR3NWEdYKAAIcV4RPh9fBdwAIAAIAAAACCAADAAAAAAgABAAAAAMKAAUcV41mUIAnEAoABhxXjWZQf2PAAAA
+
+First impression:
+Cursor ini jauh lebih pendek (~74 bytes setelah decode) dibandingkan cursor Tab "Top" (>500 bytes).
+16.2 Hex Dump & Struktur Thrift (Tab Latest)
+
+Berbeda dengan Tab "Top" di mana payload utama bersarang di dalam string Base64 pada Field#5, cursor "Latest" menyimpan datanya secara langsung pada struktur Thrift di Field#3.
+
+Hasil parse Thrift dari Cursor 1:
+
+0c 00 03 0c 00 01 0a 00 01 1c 57 8d 47 73 56 11 d6 0a 00 02 1c 57 8a 94 76 d7 31 82 00 08 00 02 00 00 00 02 08 00 03 00 00 00 00 08 00 04 00 00 00 00 0a 00 05 1c 57 8d 66 50 80 27 10 0a 00 06 1c 57 8d 66 50 7f d8 f0 00 00
+
+Struktur hierarkinya:
+
+Outer Struct [Field#3]
+  ├── Field#1 (Struct)
+  │     ├── Field#1 (i64): 0x1C578D47735611D6  ← MAX_TWEET_ID (Batas atas timeline)
+  │     └── Field#2 (i64): 0x1C578A9476D73182  ← ANCHOR_ID (Batas bawah / pointer scroll saat ini)
+  │
+  ├── Field#2 (i32): 2                         ← Direction (2 = Next Page)
+  ├── Field#3 (i32): 0                         ← Unknown flag
+  ├── Field#4 (i32): 0                         ← PAGE COUNTER (Depth scroll)
+  ├── Field#5 (i64): 0x1C578D6650802710        ← Timestamp awal eksekusi query
+  └── Field#6 (i64): 0x1C578D66507FD8F0        ← Internal Offset X
+
+16.3 Analisis Diferensial (Tab Top vs Tab Latest)
+
+Terdapat dua perbedaan arsitektur yang sangat krusial:
+
+    Tidak ada Session ID dan array records (Blacklist).
+    Karena Tab "Latest" hanya perlu menampilkan tweet secara berurutan berdasarkan waktu, server tidak perlu menyimpan state deduplikasi ("tweet apa saja yang sudah dilihat"). Server cukup mengambil instruksi: “Berikan N tweet yang ID-nya lebih kecil dari ANCHOR_ID.”
+
+    Posisi Page Counter Berbeda.
+    Pada Tab "Top", page counter (depth) berada di Field#7. Pada Tab "Latest", indikator kedalaman ini berada di Field#4. Nilai ini meningkat setiap pergantian halaman (0 -> 1 -> 2 -> 3).
+
+16.4 Metodologi Eksploitasi: Forging "God Cursor" untuk Latest
+
+Karena tidak ada array records yang harus dijaga, manipulasi cursor "Latest" menjadi sangat lugas. Mekanisme pertahanan utama Twitter pada endpoint ini adalah Deep Pagination Limit, yang dipicu apabila Field#4 (Page Counter) mencapai ambang batas tertentu, mengakibatkan Rate Limit (HTTP 429/401).
+
+The Exploit (Amnesia Page Counter):
+Untuk mem-bypass limitasi ini, kita dapat melakukan intercept pada cursor asli dari server, melakukan decode, mereset nilai Field#4 kembali ke 0, dan melakukan encode ulang.
+Python
+
+def forge_latest_cursor(original_cursor):
+    d = decode_latest_cursor(original_cursor)
+    d['f4'] = 0  # Reset Page Counter
+    return encode_latest_cursor(d)
+
+Hasil Pengujian:
+Ketika cursor hasil forge (dengan Page Counter yang dimanipulasi menjadi 0) dikirimkan kembali ke server (bahkan dari akun/sesi yang berbeda), server memproses request tersebut dengan kode respons 200 OK dan mengembalikan dataset yang 100% identik dengan dataset jika menggunakan cursor asli.
+
+Hal ini membuktikan bahwa validasi backend X pada cursor "Latest" bergantung penuh pada Anchor ID tanpa mengaitkan histori scroll depth dengan sesi pengguna tertentu.
+
+
 *Dokumen ini dibuat berdasarkan empirical byte-level analysis. Semua klaim diverifikasi dengan roundtrip test yang passing.*
