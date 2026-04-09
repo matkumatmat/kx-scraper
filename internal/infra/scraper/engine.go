@@ -13,12 +13,28 @@ import (
 
 	"kx-scraper/internal/exporter"
 	"kx-scraper/internal/infra/parser/curl"
+	"kx-scraper/internal/infra/parser/cursor" // IMPORT SIHIR CTF KITA DI SINI!
 	"kx-scraper/internal/models"
 )
 
+// buildVariables bikin salinan bersih variables per-request.
+// JANGAN mutate p.Variables langsung karena itu di-share.
+func buildVariables(p *curl.ParsedReq, nextCursor string) map[string]interface{} {
+	vars := make(map[string]interface{}, len(p.Variables))
+	for k, v := range p.Variables {
+		vars[k] = v
+	}
+	if nextCursor != "" {
+		vars["cursor"] = nextCursor
+	} else {
+		delete(vars, "cursor")
+	}
+	return vars
+}
+
 // Perhatikan: parameter keempat sekarang nangkep isRaw
 func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, isRaw bool) error {
-	slog.Info("Memulai engine scraper multi-auth", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
+	slog.Info("Memulai engine scraper multi-auth (FORGED CURSOR MODE)", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -30,7 +46,7 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 	}
 
 	totalTweets := 0
-	var nextCursor string
+	var nextCursor string // Ini bakal diisi forged cursor
 	currentAuthIdx := 0
 
 	// Senjata buat hapus HTML tag (misal <a> href... </a>)
@@ -40,18 +56,10 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 		p := authPool[currentAuthIdx]
 		slog.Info("Eksekusi halaman", "page", page, "akun_index", currentAuthIdx)
 
-		if nextCursor != "" {
-			p.Variables["cursor"] = nextCursor
-		}
+		// Bikin vars baru pake cursor (kalo ada)
+		vars := buildVariables(p, nextCursor)
 
-		// if nextCursor != "" {
-		// 	for _, auth := range authPool {
-		// 		auth.Variables["cursor"] = nextCursor
-		// 	}
-		// }
-		fmt.Printf("Variables akun %d: %+v\n", currentAuthIdx, p.Variables)
-
-		varsBytes, _ := json.Marshal(p.Variables)
+		varsBytes, _ := json.Marshal(vars)
 		varsEncoded := strings.ReplaceAll(url.QueryEscape(string(varsBytes)), "+", "%20")
 
 		req, err := http.NewRequest("GET", p.BaseURL, nil)
@@ -69,13 +77,6 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 				req.Header.Set(k, v)
 			}
 		}
-
-		// DEBUGGING START
-		fmt.Println("--- REQUEST CHECK ---")
-		fmt.Println("Features Length:", len(p.Features))
-		fmt.Println("Final URL:", req.URL.String()) // Cek apakah ada &features=... dan &variables=...{"cursor":"..."}
-		fmt.Println("---------------------")
-		// DEBUGGING END
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -101,14 +102,22 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 			slog.Error("JSON berantakan", "error", err)
 			return err
 		}
-		fmt.Println("RAW BODY 500 CHAR:", string(body)[:500])
 
 		pageTweetCount := 0
 		newCursorFound := false
+		var candidateCursor string
+
 		instructions := xData.Data.SearchByRawQuery.SearchTimeline.Timeline.Instructions
 
 		for _, inst := range instructions {
 			for _, entry := range inst.Entries {
+
+				// Ambil cursor di level entry
+				if entry.Content.CursorType == "Bottom" {
+					candidateCursor = entry.Content.Value
+					newCursorFound = true
+				}
+
 				tweet := entry.Content.ItemContent.TweetResults.Result
 				if tweet.RestID != "" {
 					userCore := tweet.Core.UserResults.Result
@@ -170,30 +179,32 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 					pageTweetCount++
 					totalTweets++
 				}
-
-				if entry.Content.CursorType == "Bottom" {
-					nextCursor = entry.Content.Value
-					newCursorFound = true
-				}
 			}
 
+			// Ambil cursor di level instruction
 			if inst.Entry != nil && inst.Entry.Content.CursorType == "Bottom" {
-				nextCursor = inst.Entry.Content.Value
+				candidateCursor = inst.Entry.Content.Value
 				newCursorFound = true
 			}
 		}
 
 		slog.Info("Halaman selesai", "page", page, "tweets", pageTweetCount)
 
-		// DEBUG: Lacak cursor biar nggak duplikat
-		slog.Info("Cursor debug",
-			"page", page,
-			"nextCursor", nextCursor,
-			"found", newCursorFound)
-
-		if !newCursorFound || nextCursor == "" {
+		if !newCursorFound || candidateCursor == "" {
 			slog.Warn("Cursor abis, scraping stop")
 			break
+		}
+
+		// ---------------------------------------------------------
+		// MAGIC BYPASS: FORGE CURSOR UNTUK AKUN BERIKUTNYA
+		// ---------------------------------------------------------
+		forgedCursor, err := cursor.GenerateNextCursor(candidateCursor)
+		if err != nil {
+			slog.Error("Gagal forge cursor! Jatuh ke cursor asli", "error", err)
+			nextCursor = candidateCursor // Fallback ke asli kalau gagal ngehack
+		} else {
+			nextCursor = forgedCursor
+			slog.Debug("Berhasil forge cursor untuk halaman berikutnya")
 		}
 
 		currentAuthIdx = (currentAuthIdx + 1) % len(authPool)
