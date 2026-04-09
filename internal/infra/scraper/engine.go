@@ -13,7 +13,7 @@ import (
 
 	"kx-scraper/internal/exporter"
 	"kx-scraper/internal/infra/parser/curl"
-	"kx-scraper/internal/infra/parser/cursor" // IMPORT SIHIR CTF KITA
+	"kx-scraper/internal/infra/parser/cursor" // IMPORT SIHIR CTF KITA (Top & Latest)
 	"kx-scraper/internal/models"
 )
 
@@ -33,7 +33,16 @@ func buildVariables(p *curl.ParsedReq, nextCursor string) map[string]interface{}
 }
 
 func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, isRaw bool) error {
-	slog.Info("Memulai engine scraper multi-auth (GOD CURSOR MODE)", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
+	// Deteksi otomatis kita lagi di Tab apa
+	tabMode := authPool[0].Variables["product"].(string)
+	isLatest := tabMode == "Latest"
+
+	slog.Info("Memulai engine scraper multi-auth (HYBRID GOD CURSOR MODE)",
+		"max_pages", maxPages,
+		"total_auth", len(authPool),
+		"mode_raw", isRaw,
+		"tab", tabMode,
+	)
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -193,18 +202,25 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 		}
 
 		// ---------------------------------------------------------
-		// MAGIC BYPASS: FORGE GOD CURSOR UNTUK AKUN BERIKUTNYA
+		// MAGIC BYPASS: FORGE GOD CURSOR SESUAI TAB
 		// ---------------------------------------------------------
-		forgedCursor, err := cursor.ForgeGodCursor(candidateCursor)
-		if err != nil {
-			// LU LIAT INI, SEKARANG DIA BAKAL NGE-PRINT CURSOR ASLINYA BIAR KITA BISA BEDAH!
+		var forgedCursor string
+		var forgeErr error
+
+		if isLatest {
+			forgedCursor, forgeErr = cursor.ForgeGodCursorLatest(candidateCursor)
+		} else {
+			forgedCursor, forgeErr = cursor.ForgeGodCursorTop(candidateCursor)
+		}
+
+		if forgeErr != nil {
 			slog.Error("Gagal forge cursor! Jatuh ke cursor asli",
-				"error", err,
+				"error", forgeErr,
 				"raw_cursor_failing", candidateCursor)
 			nextCursor = candidateCursor // Fallback ke asli kalau gagal ngehack
 		} else {
 			nextCursor = forgedCursor
-			slog.Debug("Berhasil forge GOD CURSOR (Anti-Deep Pagination + Keep Blacklist)!")
+			slog.Debug("Berhasil forge GOD CURSOR!", "mode", tabMode)
 		}
 
 		currentAuthIdx = (currentAuthIdx + 1) % len(authPool)
