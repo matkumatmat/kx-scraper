@@ -3,6 +3,8 @@
 # ==========================
 /kx
 *.exe
+*.json
+*.html
 *.test
 vendor/
 go.work
