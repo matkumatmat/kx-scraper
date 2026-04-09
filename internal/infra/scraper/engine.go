@@ -7,13 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"regexp" // Wajib buat bersihin HTML tag
+	"regexp"
 	"strings"
 	"time"
 
 	"kx-scraper/internal/exporter"
 	"kx-scraper/internal/infra/parser/curl"
-	"kx-scraper/internal/infra/parser/cursor" // IMPORT SIHIR CTF KITA DI SINI!
+	"kx-scraper/internal/infra/parser/cursor" // IMPORT SIHIR CTF KITA
 	"kx-scraper/internal/models"
 )
 
@@ -32,9 +32,8 @@ func buildVariables(p *curl.ParsedReq, nextCursor string) map[string]interface{}
 	return vars
 }
 
-// Perhatikan: parameter keempat sekarang nangkep isRaw
 func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, isRaw bool) error {
-	slog.Info("Memulai engine scraper multi-auth (FORGED CURSOR MODE)", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
+	slog.Info("Memulai engine scraper multi-auth (GOD CURSOR MODE)", "max_pages", maxPages, "total_auth", len(authPool), "mode_raw", isRaw)
 
 	client := &http.Client{
 		Transport: &http.Transport{
@@ -49,7 +48,7 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 	var nextCursor string // Ini bakal diisi forged cursor
 	currentAuthIdx := 0
 
-	// Senjata buat hapus HTML tag (misal <a> href... </a>)
+	// Senjata buat hapus HTML tag
 	htmlRegex := regexp.MustCompile(`<[^>]*>`)
 
 	for page := 1; page <= maxPages; page++ {
@@ -111,7 +110,6 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 
 		for _, inst := range instructions {
 			for _, entry := range inst.Entries {
-
 				// Ambil cursor di level entry
 				if entry.Content.CursorType == "Bottom" {
 					candidateCursor = entry.Content.Value
@@ -124,7 +122,6 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 					userLegacy := userCore.Legacy
 					postLegacy := tweet.Legacy
 
-					// LOGIC RAW vs SANITIZED
 					finalText := postLegacy.FullText
 					finalDesc := userLegacy.Description
 					finalSource := tweet.Source
@@ -196,15 +193,18 @@ func FetchData(authPool []*curl.ParsedReq, maxPages int, exp exporter.Exporter, 
 		}
 
 		// ---------------------------------------------------------
-		// MAGIC BYPASS: FORGE CURSOR UNTUK AKUN BERIKUTNYA
+		// MAGIC BYPASS: FORGE GOD CURSOR UNTUK AKUN BERIKUTNYA
 		// ---------------------------------------------------------
-		forgedCursor, err := cursor.GenerateNextCursor(candidateCursor)
+		forgedCursor, err := cursor.ForgeGodCursor(candidateCursor)
 		if err != nil {
-			slog.Error("Gagal forge cursor! Jatuh ke cursor asli", "error", err)
+			// LU LIAT INI, SEKARANG DIA BAKAL NGE-PRINT CURSOR ASLINYA BIAR KITA BISA BEDAH!
+			slog.Error("Gagal forge cursor! Jatuh ke cursor asli",
+				"error", err,
+				"raw_cursor_failing", candidateCursor)
 			nextCursor = candidateCursor // Fallback ke asli kalau gagal ngehack
 		} else {
 			nextCursor = forgedCursor
-			slog.Debug("Berhasil forge cursor untuk halaman berikutnya")
+			slog.Debug("Berhasil forge GOD CURSOR (Anti-Deep Pagination + Keep Blacklist)!")
 		}
 
 		currentAuthIdx = (currentAuthIdx + 1) % len(authPool)

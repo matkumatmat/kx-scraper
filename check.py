@@ -74,4 +74,4 @@ def analyze_duplicates(filepath):
 
 if __name__ == "__main__":
     # Sesuaiin sama nama file hasil export dari terminal lu
-    analyze_duplicates("btc2.json")
+    analyze_duplicates("btc4.json")
